@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { validationResult } = require('express-validator');
 const Post = require('../models/post');
+const User = require('../models/user');
 
 exports.getPosts = (req, res, next)=>{
     const currentPage = req.query.page;
@@ -44,19 +45,27 @@ exports.createPost = (req, res, next)=>{
     }
     const title = req.body.title;
     const content = req.body.content;
+    let creator;
     const post = new Post({
         title: title,
         content: content,
         imageUrl: req.file.path,
-        creator:{
-            name: 'Kshitiz Kumar'
-        },
+        creator: req.userId,
     })
     post.save()
     .then(result=>{
+        return User.findById(req.userId)
+    })
+    .then(user=>{
+        user.posts.push(post);
+        creator = user;
+        return user.save();
+    })
+    .then(result=>{
         res.status(201).json({
             message: "post created successfully",
-            post: result
+            post: post,
+            creator: {_id: creator._id, name: creator.name}
         })
     }).catch(err=>{
         if(!err.statusCode){
@@ -146,12 +155,54 @@ exports.deletePost = (req, res, next)=>{
             error.statusCode = 404;
             throw err;
         }
+        if(post.creator.toString()!==req.userId){
+            const error = new Error('Not authorized!');
+            error.statusCode = 403;
+            throw error;
+        }
         clearImage(post.imageUrl);
         return Post.findByIdAndDelete(postId);
     })
     .then(result=>{
+        return User.findById(req.userId)
+    })
+    .then(user=>{
+        user.posts.pull(postId);
+        return user.save();
+    })
+    .then(result=>{
         res.status(200).json({
             message: 'post deleted succesfully.'
+        })
+    })
+    .catch(err=>{
+        if(!err.statusCode){
+            err.statusCode = 500;
+        }
+        next(err);
+    })
+}
+
+exports.getStatus = (req, res, next)=>{
+    User.findById(req.userId)
+    .then(user=>{
+        res.status(200).json({
+            message: 'status fetched.',
+            status: user.status
+        })
+    })
+}
+
+exports.updateStatus = (req, res, next)=>{
+    const status = req.body.status;
+    User.findById(req.userId)
+    .then(user=>{
+        user.status = status;
+        return user.save();
+    })
+    .then(result=>{
+        res.status(200).json({
+            message: 'status updated.'
         })
     })
     .catch(err=>{
