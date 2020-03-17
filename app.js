@@ -3,9 +3,10 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const multer = require('multer');
+const graphqlHttp = require('express-graphql');
 
-const feedRoutes = require('./routes/feed');
-const authRoutes = require('./routes/auth');
+const graphqlSchema = require('./graphql/schema');
+const graphqlResolvers = require('./graphql/resolvers');
 
 const storage = multer.diskStorage({
     destination: (req, file, cb)=>{
@@ -36,22 +37,41 @@ app.use((req, res, next)=>{
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if(req.method==='OPTIONS'){
+        return res.sendStatus(200);
+    }
     next();
 })
 
-app.use('/feed', feedRoutes);
-app.use('/auth', authRoutes);
+app.use('/graphql', graphqlHttp({
+    schema: graphqlSchema,
+    rootValue: graphqlResolvers,
+    graphiql: true,
+    formatError(err){
+        if(!err.originalError){
+            return err;
+        }
+        const data = err.originalError.data;
+        const message=err.message||'An Error Ocurred';
+        const code = err.originalError.code||500;
+        return {
+            message,
+            data,
+            status: code
+        }
+    }
+}));
 
-app.use((error, req, res, next)=>{
-    console.log(error);
-    const status = error.statusCode||500;
-    const message = error.message;
-    const data = error.data;
-    return res.status(status).json({
-        message: message,
-        data
-    })
-})
+// app.use((error, req, res, next)=>{
+//     console.log(error);
+//     const status = error.statusCode||500;
+//     const message = error.message;
+//     const data = error.data;
+//     return res.status(status).json({
+//         message: message,
+//         data
+//     })
+// })
 
 mongoose.connect(
     'mongodb+srv://kshitijk83:451422ere@paracticing-bfzmz.mongodb.net/messages?retryWrites=true'
